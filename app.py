@@ -5,6 +5,23 @@ import matplotlib.pyplot as plt
 from wordcloud import WordCloud
 from preprocess import clean_text
 from scraper import NEWS_SOURCES, scrape_multiple
+import streamlit as st
+import pandas as pd
+import joblib
+import matplotlib.pyplot as plt
+from wordcloud import WordCloud
+from preprocess import clean_text
+from scraper import NEWS_SOURCES, scrape_multiple
+
+# ---------- Auto-download NLTK data (needed for cloud deployment) ----------
+import nltk
+for pkg, path in [('stopwords', 'corpora/stopwords'),
+                  ('punkt', 'tokenizers/punkt')]:
+    try:
+        nltk.data.find(path)
+    except LookupError:
+        nltk.download(pkg, quiet=True)
+# --------------------------------------------------------------------------
 
 # =========================================================
 # PAGE CONFIG
