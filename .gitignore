@@ -1,0 +1,19 @@
+# Virtual environment
+venv/
+env/
+
+# Data
+data/*.csv
+data/*.zip
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Screenshots (optional)
+screenshots/
+
+# OS files
+.DS_Store
+Thumbs.db
