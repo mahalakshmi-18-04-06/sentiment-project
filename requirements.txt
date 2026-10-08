@@ -9,3 +9,5 @@ wordcloud
 matplotlib
 seaborn
 joblib
+transformers
+torch

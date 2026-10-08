@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import joblib
 import matplotlib.pyplot as plt
+from scraper import NEWS_SOURCES, scrape_multiple
+from bert_analyzer import BertSentimentAnalyzer
 from wordcloud import WordCloud
 from preprocess import clean_text
 from scraper import NEWS_SOURCES, scrape_multiple
@@ -12,6 +14,7 @@ import matplotlib.pyplot as plt
 from wordcloud import WordCloud
 from preprocess import clean_text
 from scraper import NEWS_SOURCES, scrape_multiple
+
 
 # ---------- Auto-download NLTK data (needed for cloud deployment) ----------
 import nltk
@@ -405,7 +408,12 @@ def load_artifacts():
     tfidf = joblib.load("models/tfidf_vectorizer.pkl")
     return model, tfidf
 
+@st.cache_resource
+def load_bert():
+    return BertSentimentAnalyzer()
+
 model, tfidf = load_artifacts()
+bert = load_bert()
 
 # =========================================================
 # TOP BRAND BAR
@@ -484,8 +492,12 @@ st.sidebar.markdown("""
 # =========================================================
 # TABS
 # =========================================================
-tab1, tab2, tab3 = st.tabs(["📊 Live Dashboard", "🔬 Model Information", "ℹ️ About"])
-
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📊 Live Dashboard",
+    "🧠 Model Comparison",
+    "🔬 Model Information",
+    "ℹ️ About"
+])
 # =========================================================
 # TAB 1: LIVE DASHBOARD
 # =========================================================
@@ -667,8 +679,126 @@ with tab1:
             """, unsafe_allow_html=True)
 
 # =========================================================
-# TAB 2: MODEL INFORMATION
+# TAB 2: MODEL COMPARISON (Logistic Regression vs BERT)
 # =========================================================
+with tab2:
+    st.markdown("### 🧠 Model Comparison: Classical ML vs BERT")
+    st.markdown(
+        "Run the same set of headlines through **both models** and compare predictions side-by-side."
+    )
+
+    st.markdown("---")
+
+    # Input area
+    col_input1, col_input2 = st.columns([3, 1])
+    with col_input1:
+        sample_text = st.text_area(
+            "Enter text to compare (one per line):",
+            value=(
+                "I love this product! Best purchase ever.\n"
+                "This is terrible. Worst experience of my life.\n"
+                "Cornell students voice frustration at public hearing over rape case.\n"
+                "Israel honours Captain Smit Machchhar's valour with billboards in Mumbai.\n"
+                "Breaking the blister pack: Counterfeit medicines network busted\n"
+                "PM Modi speaks to Flydubai pilot Captain Smit Machchhar\n"
+                "Hundreds of French schools closed after teacher attacked\n"
+                "India wins gold medal at Asian Games"
+            ),
+            height=200,
+            key="compare_input"
+        )
+    with col_input2:
+        st.markdown("**Tips:**")
+        st.markdown("- One sentence per line")
+        st.markdown("- Try news headlines")
+        st.markdown("- Try informal tweets")
+        run_compare = st.button("Compare", use_container_width=True, key="cmp_btn")
+
+    if run_compare:
+        lines = [line.strip() for line in sample_text.split("\n") if line.strip()]
+
+        if not lines:
+            st.warning("Please enter at least one line of text.")
+        else:
+            with st.spinner("Running both models..."):
+                # Logistic Regression prediction
+                cleaned = [clean_text(t) for t in lines]
+                vectors = tfidf.transform(cleaned)
+                lr_preds = model.predict(vectors)
+                if hasattr(model, "predict_proba"):
+                    lr_probs = model.predict_proba(vectors)[:, 1]
+                else:
+                    lr_probs = [0.5] * len(lr_preds)
+
+                # BERT prediction
+                bert_results = bert.predict_batch(lines)
+
+            # Build comparison dataframe
+            rows = []
+            for i, text in enumerate(lines):
+                lr_label = "Positive" if lr_preds[i] == 1 else "Negative"
+                lr_conf = round(lr_probs[i] * 100, 1)
+                rows.append({
+                    "Text": text[:80] + ("..." if len(text) > 80 else ""),
+                    "LR Prediction": lr_label,
+                    "LR Conf": f"{lr_conf}%",
+                    "BERT Prediction": bert_results[i]["label"],
+                    "BERT Conf": f"{bert_results[i]['confidence']}%",
+                    "Agree?": "✅" if lr_label == bert_results[i]["label"] else "❌",
+                })
+
+            df_compare = pd.DataFrame(rows)
+
+            # Summary stats
+            total = len(df_compare)
+            agree = (df_compare["Agree?"] == "✅").sum()
+            agree_pct = round(agree / total * 100, 1)
+
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total Tested", total)
+            col2.metric("Models Agree", f"{agree}/{total}")
+            col3.metric("Agreement Rate", f"{agree_pct}%")
+
+            st.markdown("---")
+
+            # Comparison table
+            st.markdown("#### Side-by-Side Predictions")
+            st.dataframe(df_compare, use_container_width=True, hide_index=True)
+
+            # Confidence comparison chart
+            st.markdown("#### Confidence Comparison")
+            fig, ax = plt.subplots(figsize=(10, max(3, len(lines) * 0.5)))
+            x = range(len(lines))
+            width = 0.35
+
+            lr_confs = [float(r["LR Conf"].strip("%")) for r in rows]
+            bert_confs = [float(r["BERT Conf"].strip("%")) for r in rows]
+
+            ax.barh([i - width/2 for i in x], lr_confs, width,
+                    label="Logistic Regression", color="#6366f1", alpha=0.85)
+            ax.barh([i + width/2 for i in x], bert_confs, width,
+                    label="BERT", color="#10b981", alpha=0.85)
+
+            ax.set_yticks(list(x))
+            ax.set_yticklabels([f"#{i+1}" for i in x])
+            ax.set_xlabel("Confidence (%)")
+            ax.set_xlim(0, 105)
+            ax.legend(loc="lower right")
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            plt.tight_layout()
+            st.pyplot(fig)
+            plt.close(fig)
+
+            # Summary insight
+            st.markdown("---")
+            st.markdown("#### Key Observation")
+            st.info(
+                f"**Logistic Regression** (trained on informal tweets) and "
+                f"**BERT** (context-aware transformer) agree on **{agree_pct}%** of cases.\n\n"
+                "Where they **disagree**, BERT is usually more accurate on formal news headlines — "
+                "this demonstrates the **domain shift** problem and how transformers solve it."
+            )
 with tab2:
     st.markdown("### Model Performance Comparison")
     st.markdown("Four classical ML models were trained on 200,000 tweets from the Sentiment140 dataset.")
