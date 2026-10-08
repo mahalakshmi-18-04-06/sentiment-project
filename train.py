@@ -46,11 +46,35 @@ X_train_tf = tfidf.fit_transform(X_train)
 X_test_tf  = tfidf.transform(X_test)
 
 # ---------- 7. TRAIN MULTIPLE MODELS ----------
+# ---------- 7. TRAIN MULTIPLE MODELS ----------
+from sklearn.ensemble import (
+    RandomForestClassifier,
+    BaggingClassifier,
+    AdaBoostClassifier,
+    GradientBoostingClassifier,
+)
+from sklearn.tree import DecisionTreeClassifier
+
 models = {
     "Logistic Regression": LogisticRegression(max_iter=1000),
     "Naive Bayes":         MultinomialNB(),
     "Linear SVM":          LinearSVC(),
-    "Random Forest":       RandomForestClassifier(n_estimators=100, n_jobs=-1, random_state=42)
+    "Random Forest":       RandomForestClassifier(n_estimators=100, n_jobs=-1, random_state=42),
+    # --- Unit 5: Ensemble Learning additions ---
+    "Bagging (DT)":        BaggingClassifier(
+                                estimator=DecisionTreeClassifier(max_depth=10),
+                                n_estimators=50,
+                                random_state=42,
+                                n_jobs=-1,
+                            ),
+    "AdaBoost":            AdaBoostClassifier(
+                                n_estimators=100,
+                                random_state=42,
+                            ),
+    "Gradient Boosting":   GradientBoostingClassifier(
+                                n_estimators=100,
+                                random_state=42,
+                            ),
 }
 
 results = {}

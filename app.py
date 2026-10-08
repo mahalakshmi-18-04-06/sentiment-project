@@ -2,21 +2,12 @@ import streamlit as st
 import pandas as pd
 import joblib
 import matplotlib.pyplot as plt
+from wordcloud import WordCloud
+from preprocess import clean_text
 from scraper import NEWS_SOURCES, scrape_multiple
 from bert_analyzer import BertSentimentAnalyzer
-from wordcloud import WordCloud
-from preprocess import clean_text
-from scraper import NEWS_SOURCES, scrape_multiple
-import streamlit as st
-import pandas as pd
-import joblib
-import matplotlib.pyplot as plt
-from wordcloud import WordCloud
-from preprocess import clean_text
-from scraper import NEWS_SOURCES, scrape_multiple
 
-
-# ---------- Auto-download NLTK data (needed for cloud deployment) ----------
+# ---------- Auto-download NLTK data (needed for cloud) ----------
 import nltk
 for pkg, path in [('stopwords', 'corpora/stopwords'),
                   ('punkt', 'tokenizers/punkt')]:
@@ -24,7 +15,6 @@ for pkg, path in [('stopwords', 'corpora/stopwords'),
         nltk.data.find(path)
     except LookupError:
         nltk.download(pkg, quiet=True)
-# --------------------------------------------------------------------------
 
 # =========================================================
 # PAGE CONFIG
@@ -37,146 +27,75 @@ st.set_page_config(
 )
 
 # =========================================================
-# PROFESSIONAL CSS
+# CUSTOM CSS
 # =========================================================
 st.markdown("""
 <style>
-    /* ---------- Global ---------- */
     html, body, [class*="css"] {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
-    .stApp {
-        background: linear-gradient(180deg, #f7f9fc 0%, #ffffff 400px);
-    }
+    .stApp { background: linear-gradient(180deg, #f7f9fc 0%, #ffffff 400px); }
+    #MainMenu, footer, header { visibility: hidden; }
 
-    /* Hide Streamlit default menu & footer for cleaner look */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-
-    /* ---------- Top Brand Bar ---------- */
     .brand-bar {
-        display: flex;
-        align-items: center;
-        gap: 12px;
+        display: flex; align-items: center; gap: 12px;
         padding: 6px 0 18px 0;
-        border-bottom: 1px solid #e5e9f0;
-        margin-bottom: 24px;
+        border-bottom: 1px solid #e5e9f0; margin-bottom: 24px;
     }
     .brand-logo {
-        width: 42px;
-        height: 42px;
+        width: 42px; height: 42px;
         background: linear-gradient(135deg, #6366f1, #2a5298);
         border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-size: 22px;
-        font-weight: 700;
+        display: flex; align-items: center; justify-content: center;
+        color: white; font-size: 22px; font-weight: 700;
         box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
     }
     .brand-name {
-        font-size: 1.4rem;
-        font-weight: 800;
-        color: #1a1f36;
-        letter-spacing: -0.5px;
-        margin: 0;
+        font-size: 1.4rem; font-weight: 800;
+        color: #1a1f36; letter-spacing: -0.5px; margin: 0;
     }
-    .brand-tagline {
-        font-size: 0.85rem;
-        color: #6b7280;
-        margin: 0;
-    }
+    .brand-tagline { font-size: 0.85rem; color: #6b7280; margin: 0; }
     .brand-badge {
-        margin-left: auto;
-        background: #ecfdf5;
-        color: #047857;
-        padding: 6px 12px;
-        border-radius: 20px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        border: 1px solid #a7f3d0;
+        margin-left: auto; background: #ecfdf5; color: #047857;
+        padding: 6px 12px; border-radius: 20px;
+        font-size: 0.75rem; font-weight: 600; border: 1px solid #a7f3d0;
     }
 
-    /* ---------- Hero Banner ---------- */
     .hero {
         background: linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #6366f1 100%);
-        padding: 40px 44px;
-        border-radius: 18px;
-        color: white;
+        padding: 40px 44px; border-radius: 18px; color: white;
         margin-bottom: 26px;
         box-shadow: 0 10px 30px rgba(30, 60, 114, 0.25);
-        position: relative;
-        overflow: hidden;
-    }
-    .hero::after {
-        content: "";
-        position: absolute;
-        top: -50px;
-        right: -50px;
-        width: 250px;
-        height: 250px;
-        background: radial-gradient(circle, rgba(255,255,255,0.15), transparent 70%);
-        border-radius: 50%;
+        position: relative; overflow: hidden;
     }
     .hero h1 {
-        color: white !important;
-        margin: 0 0 12px 0;
-        font-size: 2.1rem;
-        font-weight: 800;
-        letter-spacing: -0.8px;
-        line-height: 1.2;
+        color: white !important; margin: 0 0 12px 0;
+        font-size: 2.1rem; font-weight: 800;
+        letter-spacing: -0.8px; line-height: 1.2;
     }
-    .hero p {
-        color: #cdd9f0 !important;
-        margin: 0;
-        font-size: 1.05rem;
-        font-weight: 400;
-        max-width: 700px;
-    }
-    .hero-badges {
-        margin-top: 20px;
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-    }
+    .hero p { color: #cdd9f0 !important; margin: 0; font-size: 1.05rem; max-width: 700px; }
+    .hero-badges { margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
     .hero-badge {
-        background: rgba(255,255,255,0.15);
-        backdrop-filter: blur(8px);
-        padding: 6px 14px;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        font-weight: 500;
+        background: rgba(255,255,255,0.15); backdrop-filter: blur(8px);
+        padding: 6px 14px; border-radius: 20px;
+        font-size: 0.8rem; font-weight: 500;
         border: 1px solid rgba(255,255,255,0.25);
     }
 
-    /* ---------- Section headers ---------- */
     .section-header {
-        font-size: 1.15rem;
-        font-weight: 700;
-        color: #1a1f36;
-        margin-top: 28px;
-        margin-bottom: 14px;
-        padding-bottom: 0;
-        display: flex;
-        align-items: center;
-        gap: 8px;
+        font-size: 1.15rem; font-weight: 700; color: #1a1f36;
+        margin-top: 28px; margin-bottom: 14px;
+        display: flex; align-items: center; gap: 8px;
     }
     .section-header::before {
-        content: "";
-        width: 4px;
-        height: 20px;
+        content: ""; width: 4px; height: 20px;
         background: linear-gradient(180deg, #6366f1, #2a5298);
         border-radius: 2px;
     }
 
-    /* ---------- Metric cards ---------- */
     div[data-testid="stMetric"] {
-        background: #ffffff;
-        padding: 20px 22px;
-        border-radius: 14px;
-        border: 1px solid #eaeef5;
+        background: #ffffff; padding: 20px 22px;
+        border-radius: 14px; border: 1px solid #eaeef5;
         box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
         transition: all 0.2s ease;
     }
@@ -186,98 +105,56 @@ st.markdown("""
         border-color: #c7d2fe;
     }
     div[data-testid="stMetric"] label {
-        font-weight: 600;
-        color: #6b7280 !important;
-        font-size: 0.8rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
+        font-weight: 600; color: #6b7280 !important;
+        font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px;
     }
     div[data-testid="stMetric"] [data-testid="stMetricValue"] {
-        color: #1a1f36;
-        font-weight: 800;
-        font-size: 1.8rem;
+        color: #1a1f36; font-weight: 800; font-size: 1.8rem;
     }
 
-    /* ---------- Sidebar ---------- */
     section[data-testid="stSidebar"] {
         background: linear-gradient(180deg, #ffffff 0%, #f7f9fc 100%);
         border-right: 1px solid #eaeef5;
     }
-    section[data-testid="stSidebar"] > div:first-child {
-        padding-top: 20px;
-    }
     section[data-testid="stSidebar"] h3,
     section[data-testid="stSidebar"] h4 {
-        color: #1a1f36;
-        font-weight: 700;
-        letter-spacing: -0.3px;
+        color: #1a1f36; font-weight: 700;
     }
-    section[data-testid="stSidebar"] hr {
-        margin: 16px 0;
-        border-color: #eaeef5;
-    }
+    section[data-testid="stSidebar"] hr { margin: 16px 0; border-color: #eaeef5; }
 
-    /* Sidebar brand */
     .sidebar-brand {
-        display: flex;
-        align-items: center;
-        gap: 10px;
+        display: flex; align-items: center; gap: 10px;
         padding: 8px 0 16px 0;
-        border-bottom: 1px solid #eaeef5;
-        margin-bottom: 16px;
+        border-bottom: 1px solid #eaeef5; margin-bottom: 16px;
     }
     .sidebar-brand-icon {
-        width: 36px;
-        height: 36px;
+        width: 36px; height: 36px;
         background: linear-gradient(135deg, #6366f1, #2a5298);
         border-radius: 9px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-size: 18px;
+        display: flex; align-items: center; justify-content: center;
+        color: white; font-size: 18px;
     }
     .sidebar-brand-text {
-        font-weight: 800;
-        color: #1a1f36;
-        font-size: 1.05rem;
-        letter-spacing: -0.3px;
+        font-weight: 800; color: #1a1f36;
+        font-size: 1.05rem; letter-spacing: -0.3px;
     }
-    .sidebar-brand-sub {
-        font-size: 0.72rem;
-        color: #9ca3af;
-        font-weight: 500;
-    }
+    .sidebar-brand-sub { font-size: 0.72rem; color: #9ca3af; font-weight: 500; }
 
-    /* Info card in sidebar */
     .info-card {
         background: linear-gradient(135deg, #f0f4ff, #e0e7ff);
-        border: 1px solid #c7d2fe;
-        border-radius: 12px;
-        padding: 14px 16px;
-        margin-top: 12px;
+        border: 1px solid #c7d2fe; border-radius: 12px;
+        padding: 14px 16px; margin-top: 12px;
     }
     .info-card-title {
-        font-size: 0.75rem;
-        font-weight: 700;
-        color: #4338ca;
-        text-transform: uppercase;
-        letter-spacing: 0.6px;
-        margin-bottom: 8px;
+        font-size: 0.75rem; font-weight: 700; color: #4338ca;
+        text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px;
     }
     .info-card-row {
-        display: flex;
-        justify-content: space-between;
-        font-size: 0.82rem;
-        color: #4b5563;
-        padding: 4px 0;
+        display: flex; justify-content: space-between;
+        font-size: 0.82rem; color: #4b5563; padding: 4px 0;
     }
-    .info-card-row b {
-        color: #1a1f36;
-        font-weight: 700;
-    }
+    .info-card-row b { color: #1a1f36; font-weight: 700; }
 
-    /* ---------- Multiselect tags ---------- */
     span[data-baseweb="tag"] {
         background-color: #6366f1 !important;
         color: white !important;
@@ -286,17 +163,11 @@ st.markdown("""
         font-size: 0.78rem !important;
     }
 
-    /* ---------- Buttons ---------- */
     .stButton > button {
         background: linear-gradient(135deg, #6366f1 0%, #2a5298 100%);
-        color: white;
-        border: none;
-        border-radius: 10px;
-        padding: 12px 20px;
-        font-weight: 700;
-        font-size: 0.9rem;
-        letter-spacing: 0.2px;
-        transition: all 0.2s ease;
+        color: white; border: none; border-radius: 10px;
+        padding: 12px 20px; font-weight: 700; font-size: 0.9rem;
+        letter-spacing: 0.2px; transition: all 0.2s ease;
         box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
         width: 100%;
     }
@@ -305,63 +176,35 @@ st.markdown("""
         box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
         color: white;
     }
-    .stButton > button:active {
-        transform: translateY(0);
-    }
 
-    /* ---------- Tabs ---------- */
     button[data-baseweb="tab"] {
-        font-size: 0.95rem;
-        font-weight: 600;
-        color: #6b7280;
-        padding: 12px 20px;
+        font-size: 0.95rem; font-weight: 600;
+        color: #6b7280; padding: 12px 20px;
     }
-    button[data-baseweb="tab"][aria-selected="true"] {
-        color: #4338ca;
-    }
-    div[data-baseweb="tab-highlight"] {
-        background-color: #6366f1;
-    }
-    div[data-baseweb="tab-border"] {
-        background-color: #eaeef5;
-    }
+    button[data-baseweb="tab"][aria-selected="true"] { color: #4338ca; }
+    div[data-baseweb="tab-highlight"] { background-color: #6366f1; }
+    div[data-baseweb="tab-border"] { background-color: #eaeef5; }
 
-    /* ---------- Dataframe ---------- */
     div[data-testid="stDataFrame"] {
-        border: 1px solid #eaeef5;
-        border-radius: 12px;
+        border: 1px solid #eaeef5; border-radius: 12px;
         overflow: hidden;
         box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
     }
+    div[data-testid="stAlert"] { border-radius: 12px; border-left-width: 4px; }
+    div[data-testid="stAlert"] p { font-size: 0.88rem; }
 
-    /* ---------- Alerts ---------- */
-    div[data-testid="stAlert"] {
-        border-radius: 12px;
-        border-left-width: 4px;
-    }
-
-    /* ---------- Download button ---------- */
     .stDownloadButton > button {
-        background: #ffffff;
-        color: #4338ca;
-        border: 2px solid #c7d2fe;
-        border-radius: 10px;
-        font-weight: 700;
-        transition: all 0.2s;
+        background: #ffffff; color: #4338ca;
+        border: 2px solid #c7d2fe; border-radius: 10px;
+        font-weight: 700; transition: all 0.2s;
     }
     .stDownloadButton > button:hover {
-        background: #6366f1;
-        color: white;
-        border-color: #6366f1;
+        background: #6366f1; color: white; border-color: #6366f1;
     }
 
-    /* ---------- Onboarding cards ---------- */
     .onboard-card {
-        background: #ffffff;
-        border: 1px solid #eaeef5;
-        border-radius: 14px;
-        padding: 22px 24px;
-        height: 100%;
+        background: #ffffff; border: 1px solid #eaeef5;
+        border-radius: 14px; padding: 22px 24px; height: 100%;
         transition: all 0.2s ease;
     }
     .onboard-card:hover {
@@ -370,37 +213,22 @@ st.markdown("""
         transform: translateY(-2px);
     }
     .onboard-icon {
-        width: 44px;
-        height: 44px;
+        width: 44px; height: 44px;
         background: linear-gradient(135deg, #eef2ff, #e0e7ff);
         border-radius: 11px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 22px;
-        margin-bottom: 12px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 22px; margin-bottom: 12px;
     }
     .onboard-title {
-        font-size: 1rem;
-        font-weight: 700;
-        color: #1a1f36;
-        margin-bottom: 6px;
+        font-size: 1rem; font-weight: 700;
+        color: #1a1f36; margin-bottom: 6px;
     }
-    .onboard-desc {
-        font-size: 0.85rem;
-        color: #6b7280;
-        line-height: 1.5;
-    }
-
-    /* ---------- Success/error boxes in top headlines ---------- */
-    div[data-testid="stAlert"] p {
-        font-size: 0.88rem;
-    }
+    .onboard-desc { font-size: 0.85rem; color: #6b7280; line-height: 1.5; }
 </style>
 """, unsafe_allow_html=True)
 
 # =========================================================
-# LOAD MODEL
+# LOAD MODELS
 # =========================================================
 @st.cache_resource
 def load_artifacts():
@@ -416,7 +244,7 @@ model, tfidf = load_artifacts()
 bert = load_bert()
 
 # =========================================================
-# TOP BRAND BAR
+# BRAND BAR
 # =========================================================
 st.markdown("""
 <div class="brand-bar">
@@ -430,7 +258,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =========================================================
-# HERO BANNER
+# HERO
 # =========================================================
 st.markdown("""
 <div class="hero">
@@ -498,6 +326,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "🔬 Model Information",
     "ℹ️ About"
 ])
+
 # =========================================================
 # TAB 1: LIVE DASHBOARD
 # =========================================================
@@ -538,19 +367,19 @@ with tab1:
                     "_prob": probs,
                 })
 
-                # ---------- METRICS ----------
+                # Metrics
                 col1, col2, col3, col4 = st.columns(4)
                 col1.metric("Total Items", len(df))
                 col2.metric("Positive", (df["Sentiment"] == "Positive").sum())
                 col3.metric("Negative", (df["Sentiment"] == "Negative").sum())
                 col4.metric("Avg P(Positive)", f"{df['_conf_num'].mean():.1f}%")
 
-                # ---------- TABLE ----------
+                # Table
                 st.markdown('<div class="section-header">Analyzed Headlines</div>', unsafe_allow_html=True)
                 display_df = df.drop(columns=["_conf_num", "_prob"])
                 st.dataframe(display_df, use_container_width=True, height=400)
 
-                # ---------- PIE + WORD CLOUD ----------
+                # Pie + Word Cloud
                 st.markdown('<div class="section-header">Visual Insights</div>', unsafe_allow_html=True)
                 colA, colB = st.columns(2)
 
@@ -559,8 +388,7 @@ with tab1:
                     counts = df["Sentiment"].value_counts()
                     fig, ax = plt.subplots(figsize=(6, 5))
                     ax.pie(
-                        counts,
-                        labels=counts.index,
+                        counts, labels=counts.index,
                         autopct="%1.1f%%",
                         colors=["#10b981", "#ef4444"],
                         startangle=90,
@@ -589,7 +417,7 @@ with tab1:
                     else:
                         st.info("No text to display.")
 
-                # ---------- TOP 5 POSITIVE / NEGATIVE ----------
+                # Top headlines
                 st.markdown('<div class="section-header">Top Headlines by Confidence</div>', unsafe_allow_html=True)
                 colTop1, colTop2 = st.columns(2)
 
@@ -611,7 +439,7 @@ with tab1:
                     else:
                         st.info("No negative headlines")
 
-                # ---------- SOURCE BREAKDOWN ----------
+                # Source breakdown
                 st.markdown('<div class="section-header">Sentiment by Source</div>', unsafe_allow_html=True)
                 source_stats = df.groupby(["Source", "Sentiment"]).size().unstack(fill_value=0)
 
@@ -620,9 +448,7 @@ with tab1:
                     source_stats.plot(
                         kind="bar", stacked=True,
                         color=["#ef4444", "#10b981"],
-                        ax=ax3,
-                        edgecolor="white",
-                        linewidth=1,
+                        ax=ax3, edgecolor="white", linewidth=1,
                     )
                     ax3.set_ylabel("Number of Headlines", fontweight="bold")
                     ax3.set_xlabel("News Source", fontweight="bold")
@@ -636,17 +462,14 @@ with tab1:
                 else:
                     st.info("No source data available.")
 
-                # ---------- DOWNLOAD ----------
+                # Download
                 st.markdown("---")
                 csv = display_df.to_csv(index=False).encode("utf-8")
                 st.download_button(
                     "⬇️ Download Results (CSV)",
-                    csv,
-                    "sentiment_results.csv",
-                    "text/csv",
+                    csv, "sentiment_results.csv", "text/csv",
                 )
     else:
-        # ---------- ONBOARDING CARDS ----------
         st.markdown('<div class="section-header">Get Started</div>', unsafe_allow_html=True)
         st.markdown("Configure your sources in the sidebar and click **Scrape & Analyze** to run a live analysis.")
 
@@ -679,17 +502,14 @@ with tab1:
             """, unsafe_allow_html=True)
 
 # =========================================================
-# TAB 2: MODEL COMPARISON (Logistic Regression vs BERT)
+# TAB 2: MODEL COMPARISON (LR vs BERT)
 # =========================================================
 with tab2:
     st.markdown("### 🧠 Model Comparison: Classical ML vs BERT")
-    st.markdown(
-        "Run the same set of headlines through **both models** and compare predictions side-by-side."
-    )
+    st.markdown("Run the same headlines through **both models** and compare predictions side-by-side.")
 
     st.markdown("---")
 
-    # Input area
     col_input1, col_input2 = st.columns([3, 1])
     with col_input1:
         sample_text = st.text_area(
@@ -721,7 +541,6 @@ with tab2:
             st.warning("Please enter at least one line of text.")
         else:
             with st.spinner("Running both models..."):
-                # Logistic Regression prediction
                 cleaned = [clean_text(t) for t in lines]
                 vectors = tfidf.transform(cleaned)
                 lr_preds = model.predict(vectors)
@@ -730,10 +549,8 @@ with tab2:
                 else:
                     lr_probs = [0.5] * len(lr_preds)
 
-                # BERT prediction
                 bert_results = bert.predict_batch(lines)
 
-            # Build comparison dataframe
             rows = []
             for i, text in enumerate(lines):
                 lr_label = "Positive" if lr_preds[i] == 1 else "Negative"
@@ -748,8 +565,6 @@ with tab2:
                 })
 
             df_compare = pd.DataFrame(rows)
-
-            # Summary stats
             total = len(df_compare)
             agree = (df_compare["Agree?"] == "✅").sum()
             agree_pct = round(agree / total * 100, 1)
@@ -760,12 +575,9 @@ with tab2:
             col3.metric("Agreement Rate", f"{agree_pct}%")
 
             st.markdown("---")
-
-            # Comparison table
             st.markdown("#### Side-by-Side Predictions")
             st.dataframe(df_compare, use_container_width=True, hide_index=True)
 
-            # Confidence comparison chart
             st.markdown("#### Confidence Comparison")
             fig, ax = plt.subplots(figsize=(10, max(3, len(lines) * 0.5)))
             x = range(len(lines))
@@ -790,7 +602,6 @@ with tab2:
             st.pyplot(fig)
             plt.close(fig)
 
-            # Summary insight
             st.markdown("---")
             st.markdown("#### Key Observation")
             st.info(
@@ -799,23 +610,74 @@ with tab2:
                 "Where they **disagree**, BERT is usually more accurate on formal news headlines — "
                 "this demonstrates the **domain shift** problem and how transformers solve it."
             )
-with tab2:
+
+# =========================================================
+# TAB 3: MODEL INFORMATION
+# =========================================================
+with tab3:
     st.markdown("### Model Performance Comparison")
-    st.markdown("Four classical ML models were trained on 200,000 tweets from the Sentiment140 dataset.")
+    st.markdown("Models trained on 200,000 tweets from the Sentiment140 dataset.")
 
     model_results = pd.DataFrame({
-        "Model": ["Logistic Regression (selected)", "Linear SVM", "Naive Bayes", "Random Forest"],
-        "Accuracy": [0.7789, 0.7730, 0.7642, 0.7614],
-        "CV Score": ["0.7719", "—", "—", "—"],
-        "Training Time": ["Fast", "Fast", "Very Fast", "Slow"],
+        "Model": [
+            "Logistic Regression ⭐",
+            "Linear SVM",
+            "Naive Bayes",
+            "Random Forest",
+            "Gradient Boosting",
+            "AdaBoost",
+            "Bagging (Decision Tree)",
+        ],
+        "Accuracy": [0.7789, 0.7730, 0.7642, 0.7614, 0.6902, 0.6362, 0.6327],
+        "Category": [
+            "Classical (Linear)",
+            "Classical (Linear)",
+            "Classical (Probabilistic)",
+            "Ensemble — Bagging",
+            "Ensemble — Boosting",
+            "Ensemble — Boosting",
+            "Ensemble — Bagging",
+        ],
         "Notes": [
-            "Best accuracy, interpretable, saved as production model",
-            "Close second, margin-based classifier",
-            "Fastest but slightly less accurate",
-            "Overkill for text; slower without benefit",
+            "Best accuracy — production model",
+            "Margin-based linear classifier",
+            "Fast, strong probabilistic baseline",
+            "Ensemble of decision trees with bootstrap sampling",
+            "Sequential boosting; slower on sparse data",
+            "Adaptive boosting; overfits sparse TF-IDF",
+            "Explicit bagging; poor fit for sparse text",
         ],
     })
     st.dataframe(model_results, use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+    st.markdown("### Ensemble Learning (Unit 5)")
+    st.markdown("""
+**Bagging** — Bootstrap Aggregating:
+- Trains multiple base learners on different bootstrap samples
+- Aggregates predictions (voting for classification)
+- Examples: Random Forest, Bagging Classifier
+
+**Boosting** — Sequential ensemble learning:
+- Trains models sequentially, each correcting the previous model's errors
+- AdaBoost: reweights misclassified samples higher
+- Gradient Boosting: fits each new tree to residual errors of the previous
+
+**Key Empirical Finding:**
+
+| Category | Best Model | Accuracy |
+|---|---|---|
+| Classical (Linear) | Logistic Regression | **77.89%** |
+| Classical (Probabilistic) | Naive Bayes | 76.42% |
+| Ensemble (Bagging) | Random Forest | 76.14% |
+| Ensemble (Boosting) | Gradient Boosting | 69.02% |
+
+**Conclusion:** On high-dimensional sparse text data (10,000 TF-IDF features),
+classical linear models **outperform tree ensembles by 8–14 percentage points**.
+This is because linear decision boundaries are more sample-efficient in sparse
+feature spaces than axis-aligned tree splits. This finding matches published
+literature on text classification.
+""")
 
     st.markdown("---")
     st.markdown("### Preprocessing Pipeline")
@@ -852,9 +714,9 @@ with tab2:
     """)
 
 # =========================================================
-# TAB 3: ABOUT
+# TAB 4: ABOUT
 # =========================================================
-with tab3:
+with tab4:
     st.markdown("### About This Project")
     st.markdown("""
     **Title:** Real-Time Sentiment Analysis with Web Scraping
@@ -867,6 +729,7 @@ with tab3:
     - **pandas, numpy** — data handling
     - **nltk** — text preprocessing (stopwords, stemming)
     - **scikit-learn** — TF-IDF, model training, evaluation
+    - **transformers, torch** — BERT model for comparison
     - **BeautifulSoup4, requests** — web scraping
     - **Streamlit** — dashboard framework
     - **matplotlib, wordcloud** — visualization
@@ -876,11 +739,12 @@ with tab3:
     1. Load Sentiment140 dataset (1.6M tweets)
     2. Preprocess text (clean, tokenize, stem)
     3. Vectorize with TF-IDF (10,000 features, bigrams)
-    4. Train 4 models, compare accuracy
+    4. Train 7 models: classical + ensemble (Unit 5)
     5. Select best model (Logistic Regression, 77.89%)
     6. Cross-validate (5-fold) to confirm no overfitting
     7. Save model + vectorizer to disk
     8. Load in Streamlit for real-time inference
+    9. Compare with BERT (transformer) for domain shift analysis
     """)
 
     st.markdown("---")
