@@ -46,7 +46,6 @@ X_train_tf = tfidf.fit_transform(X_train)
 X_test_tf  = tfidf.transform(X_test)
 
 # ---------- 7. TRAIN MULTIPLE MODELS ----------
-# ---------- 7. TRAIN MULTIPLE MODELS ----------
 from sklearn.ensemble import (
     RandomForestClassifier,
     BaggingClassifier,

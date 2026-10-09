@@ -302,6 +302,13 @@ per_source = st.sidebar.slider(
 )
 
 st.sidebar.markdown("")
+use_bert = st.sidebar.checkbox(
+    "Compare with BERT",
+    value=False,
+    help="Also classify each headline with BERT (slower but more accurate). "
+         "Best for comparing where Logistic Regression and BERT disagree.",
+)
+
 run = st.sidebar.button("Scrape & Analyze", use_container_width=True)
 
 st.sidebar.markdown("---")
@@ -341,7 +348,7 @@ with tab1:
             if not items:
                 st.error("No headlines scraped. Try different sources.")
             else:
-                with st.spinner("Analyzing sentiment..."):
+                with st.spinner("Analyzing sentiment with Logistic Regression..."):
                     texts = [it["headline"] for it in items]
                     sources_ = [it["source"] for it in items]
 
@@ -367,19 +374,39 @@ with tab1:
                     "_prob": probs,
                 })
 
-                # Metrics
+                # ---- Optional BERT comparison on the SAME headlines ----
+                if use_bert:
+                    with st.spinner(f"Running BERT on {len(texts)} headlines (this may take ~1 minute)..."):
+                        bert_results = bert.predict_batch(texts)
+
+                    df["BERT Pred"] = [r["label"] for r in bert_results]
+                    df["BERT Conf"] = [f"{r['confidence']}%" for r in bert_results]
+                    df["Agree?"] = [
+                        "✅" if labels[i] == bert_results[i]["label"] else "❌"
+                        for i in range(len(texts))
+                    ]
+
+                    agree_count = sum(1 for a in df["Agree?"] if a == "✅")
+                    agree_pct = round(agree_count / len(df) * 100, 1)
+                    st.info(
+                        f"**BERT Comparison Enabled** — LR and BERT agree on "
+                        f"**{agree_count}/{len(df)}** headlines ({agree_pct}%). "
+                        f"Where they disagree, BERT is usually more accurate on formal news headlines."
+                    )
+
+                # ---------- METRICS ----------
                 col1, col2, col3, col4 = st.columns(4)
                 col1.metric("Total Items", len(df))
                 col2.metric("Positive", (df["Sentiment"] == "Positive").sum())
                 col3.metric("Negative", (df["Sentiment"] == "Negative").sum())
                 col4.metric("Avg P(Positive)", f"{df['_conf_num'].mean():.1f}%")
 
-                # Table
+                # ---------- TABLE ----------
                 st.markdown('<div class="section-header">Analyzed Headlines</div>', unsafe_allow_html=True)
                 display_df = df.drop(columns=["_conf_num", "_prob"])
                 st.dataframe(display_df, use_container_width=True, height=400)
 
-                # Pie + Word Cloud
+                # ---------- PIE + WORD CLOUD ----------
                 st.markdown('<div class="section-header">Visual Insights</div>', unsafe_allow_html=True)
                 colA, colB = st.columns(2)
 
@@ -417,7 +444,7 @@ with tab1:
                     else:
                         st.info("No text to display.")
 
-                # Top headlines
+                # ---------- TOP HEADLINES ----------
                 st.markdown('<div class="section-header">Top Headlines by Confidence</div>', unsafe_allow_html=True)
                 colTop1, colTop2 = st.columns(2)
 
@@ -439,7 +466,7 @@ with tab1:
                     else:
                         st.info("No negative headlines")
 
-                # Source breakdown
+                # ---------- SOURCE BREAKDOWN ----------
                 st.markdown('<div class="section-header">Sentiment by Source</div>', unsafe_allow_html=True)
                 source_stats = df.groupby(["Source", "Sentiment"]).size().unstack(fill_value=0)
 
@@ -462,7 +489,7 @@ with tab1:
                 else:
                     st.info("No source data available.")
 
-                # Download
+                # ---------- DOWNLOAD ----------
                 st.markdown("---")
                 csv = display_df.to_csv(index=False).encode("utf-8")
                 st.download_button(
@@ -502,11 +529,11 @@ with tab1:
             """, unsafe_allow_html=True)
 
 # =========================================================
-# TAB 2: MODEL COMPARISON (LR vs BERT)
+# TAB 2: MODEL COMPARISON (Manual text input)
 # =========================================================
 with tab2:
     st.markdown("### 🧠 Model Comparison: Classical ML vs BERT")
-    st.markdown("Run the same headlines through **both models** and compare predictions side-by-side.")
+    st.markdown("Type or paste any text to compare predictions from both models side-by-side.")
 
     st.markdown("---")
 
@@ -675,8 +702,7 @@ with tab3:
 **Conclusion:** On high-dimensional sparse text data (10,000 TF-IDF features),
 classical linear models **outperform tree ensembles by 8–14 percentage points**.
 This is because linear decision boundaries are more sample-efficient in sparse
-feature spaces than axis-aligned tree splits. This finding matches published
-literature on text classification.
+feature spaces than axis-aligned tree splits.
 """)
 
     st.markdown("---")
@@ -710,7 +736,7 @@ literature on text classification.
     **formal language** ("Cornell students voice frustration"). This causes lower confidence
     on news data — a classic problem called **domain shift**.
 
-    **Planned fix:** Retrain on a mixed dataset (tweets + news + reviews) and compare with BERT.
+    **Planned fix:** Retrain on a mixed dataset (tweets + news + reviews).
     """)
 
 # =========================================================
@@ -752,15 +778,24 @@ with tab4:
     st.markdown("""
     **Sentiment140** — 1.6 million tweets labeled as positive or negative.
     Downloaded from Kaggle. We use a balanced subset of 200,000 tweets (100k each).
+    
     """)
 
     st.markdown("---")
     st.markdown("### Future Scope")
     st.markdown("""
-    - **BERT/Transformers** — boost accuracy to 90%+
+    - **BERT/Transformers** — already integrated in the Model Comparison tab
     - **Multi-language support** — analyze Hindi, Telugu news
     - **Aspect-based sentiment** — "Camera is great, but battery is bad"
     - **Trend tracking** — sentiment over time
     - **Auto-alerts** — notify when sentiment drops suddenly
     - **Fine-tune on news domain** — fix the domain shift problem
     """)
+
+    st.markdown("---")
+    st.markdown("### Links")
+    st.markdown("""
+    - 🌐 **Live App:** https://ml-sentiment-analyzer.streamlit.app
+    - 💻 **GitHub:** https://github.com/mahalakshmi-18-04-06/sentiment-project
+    """)
+    
